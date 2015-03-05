@@ -25,7 +25,7 @@ function expmanager_info() {
 	return array(
 			"name"  => "EXP Manager",
 			"description"=> "Allows different EXP Categories and for threads to be submitted to each for review.",
-			"website"        => "http://megstarr.com",
+			"website"        => "https://github.com/megan-starr9/ExpManager/wiki",
 			"author"        => "Megan Lyle",
 			"authorsite"    => "http://megstarr.com",
 			"version"        => "1.0",
@@ -52,7 +52,7 @@ $plugins->add_hook("global_end", "expmanager_scripts");
 function expmanager_scripts() {
 	global $footer;
 	
-	$footer .= '</script>
+	$footer .= '<script>
 		<script src="inc/plugins/expmanager/expmanage_scripts.js" type="text/javascript">
 			</script>';
 }

@@ -282,7 +282,7 @@ function expmanager_activate() {
 /**
  * Deactivate Plugin
  */
-function myfirstplugin_deactivate()
+function expmanager_deactivate()
 {
 	// Revert any Template Edits
 	require_once MYBB_ROOT."/inc/adminfunctions_templates.php";
