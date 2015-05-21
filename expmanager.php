@@ -1,7 +1,7 @@
 <?php
 /*
  * This plugin is free to use
- * 
+ *
  * The following is amazing and was heavily referenced in the making:
  * Enhanced Account Switcher for MyBB 1.6 and 1.8
  * Copyright (c) 2012-2014 doylecc
@@ -51,10 +51,8 @@ $plugins->add_hook("global_end", "expmanager_scripts");
 
 function expmanager_scripts() {
 	global $footer;
-	
-	$footer .= '<script>
-		<script src="inc/plugins/expmanager/expmanage_scripts.js" type="text/javascript">
-			</script>';
+
+	$footer .= '<script src="inc/plugins/expmanager/expmanage_scripts.js" type="text/javascript"></script>';
 }
 
 ?>

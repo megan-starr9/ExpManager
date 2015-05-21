@@ -15,14 +15,20 @@ $plugins->add_hook("admin_config_settings_change_commit", "expmanager_custom_set
 
 function expmanager_custom_settings() {
 	global $db, $mybb, $plugins;
-	
+
 	$query = $db->simple_select('settinggroups', 'gid', "name='expmanager'");
 	$result = $query->fetch_assoc();
-	
+
 	if((int)$mybb->input['gid'] == (int)$result['gid']) {
 		// We are in the right settings, now do some magic!
 		$plugins->add_hook("admin_formcontainer_end", "expmanager_custom_settings_editform");
+		$plugins->add_hook("admin_page_output_header", "expmanage_admin_scripts");
 	}
+}
+
+// Add script that allows adding of new categories to the header
+function expmanage_admin_scripts($args) {
+	$args[this]->extra_header .= '<script src="../inc/plugins/expmanager/expmanage_scripts_admin.js" type="text/javascript"></script>';
 }
 
 /**
@@ -30,26 +36,29 @@ function expmanager_custom_settings() {
  */
 function expmanager_custom_settings_editform() {
 	global $db, $mybb, $form, $form_container;
-	
-	$form_container->output_row("", "", "<h2 style='display:inline;'>Add Exp Category</h2> <i>(Leave fields blank to opt out)</i>");
-	$form_container->output_row("", "", "<b>Name*: </b>".$form->generate_text_box("cat_name", "")."<br>"
-			."<b>Rules: </b>".$form->generate_text_area("cat_rules", "")."<br><br>"
-			."<b># of Threads: </b>".$form->generate_text_box("cat_threadamt", 0)." <i>Leave blank to disable auto-EXP (if award requires more than just simple thread count)</i><br>"
-			."<b>Exp Amount: </b>".$form->generate_text_box("cat_expamt", 0)."<br><br>"
-			.$form->generate_check_box("cat_showtids", 1, "", array('checked' => True))."<b>Show Thread Ids</b><br><i style='margin-left:30px;'>When EXP is awarded, if Thread IDs will be included in description.</i><br>"
-			.$form->generate_check_box("cat_allowduplicates",  1, "", array('checked' => True))." <b>Allow Duplicates</b><br><i style='margin-left:30px;'>If no, will not allow duplicate submission in any other category with value set 'No'</i><br>");
-	$form_container->output_row("", "", "<h2 style='display:inline;'>Remove Exp Categories</h2> <i>(Check beside to remove)</i>");
-	$delete_form = '';
-	$categories = array();
-	$query = $db->simple_select('expcategories', 'catid, cat_name');
-	while ($category = $query->fetch_assoc()) {
-		$categories[] = $category;
+	$cats = array();
+
+	// Print category edit rows
+	$query = $db->simple_select('expcategories');
+	$form_container->output_row("", "", "<h2 style='display:inline;'>EXP Category Management</h2>");
+	while($category = $query->fetch_assoc()) {
+		$cats[] = $category;
 	}
-	foreach ($categories as $category) {
-		$delete_form .= $form->generate_check_box("delete_cat[]", $category['catid'], $category['cat_name'], array('checked' => false));
+	$categoryform = '<table><tr><td>Delete?</td><td>Name</td><td>Rules</td><td title="Leave blank to
+				disable auto-EXP (if award requires more than just simple thread count)"># of threads</td>
+				<td>Exp Amount</td><td>Show Thread ids</td><td title="If no, will not allow duplicate
+				submission in any other category with value set \'No\'">Allow Duplicates</td></tr>';
+	foreach($cats as $cat) {
+		$categoryform .= "<tr><td>".$form->generate_check_box("delete_cat[]", $cat['catid'], '', array('checked' => false))."</td>"
+				."<td>".$form->generate_text_box("cat_name".$cat['catid'], $cat['cat_name'])."</td>"
+				."<td>".$form->generate_text_area("cat_rules".$cat['catid'], $cat['cat_rules'])." </td>"
+				."<td>".$form->generate_text_box("cat_threadamt".$cat['catid'], $cat['cat_threadamt'], array('style' => 'width:30px'))." </td>"
+				."<td>".$form->generate_text_box("cat_expamt".$cat['catid'], $cat['cat_expamt'], array('style' => 'width:30px'))." </td>"
+				."<td>".$form->generate_check_box("cat_showtids".$cat['catid'], 1,'', array('checked' => $cat['cat_showtids']))." </td>"
+				."<td>".$form->generate_check_box("cat_allowduplicates".$cat['catid'], 1,'', array('checked' => $cat['cat_allowduplicates']))." </td></tr>";
 	}
-	$form_container->output_row("","", $delete_form);
-	
+	$categoryform .= "</table><button type='button' id='create_category'>Create New Category</button>";
+	$form_container->output_row("", "", $categoryform);
 }
 
 /**
@@ -63,17 +72,7 @@ function expmanager_custom_settings_commit() {
 
 	if((int)$mybb->input['gid'] == (int)$result['gid']) {
 		// We are in the right settings, now do some magic!
-		if(!empty($mybb->input['cat_name'])) {
-			$category_array = array(
-					'cat_name' => $db->escape_string($mybb->input['cat_name']),
-					'cat_rules' => $db->escape_string($mybb->input['cat_rules']),
-					'cat_threadamt' => (int)$mybb->input['cat_threadamt'],
-					'cat_expamt' => (int)$mybb->input['cat_expamt'],
-					'cat_showtids' => (int)$mybb->input['cat_showtids'],
-					'cat_allowduplicates' => (int)$mybb->input['cat_allowduplicates']
-			);
-			$catid = $db->insert_query("expcategories", $category_array);
-		}
+		// Delete first
 		if(isset($mybb->input['delete_cat']) && is_array($mybb->input['delete_cat'])) {
 			$delete_string = '';
 			$delete_string2 = '';
@@ -84,12 +83,29 @@ function expmanager_custom_settings_commit() {
 					$delete_string2 .= " OR ";
 				}
 				$delete_string .= "catid = ".$to_delete;
-				$delete_string2 .= "sub_catid = ".$to_delete;				
+				$delete_string2 .= "sub_catid = ".$to_delete;
 			}
 			if(!empty($delete_string)) {
 				$db->delete_query('expcategories', $delete_string);
 				$db->delete_query('expsubmissions', $delete_string2);
 			}
+		}
+
+			// Save non-deleted categories!
+			$query = $db->simple_select('expcategories');
+			while($category = $query->fetch_assoc()) {
+				$cats[] = $category;
+			}
+			foreach($cats as $cat) {
+				$cat_array = array(
+					'cat_name' => $db->escape_string($mybb->input['cat_name'.$cat['catid']]),
+					'cat_rules' => $db->escape_string($mybb->input['cat_rules'.$cat['catid']]),
+					'cat_threadamt' => (int)$mybb->input['cat_threadamt'.$cat['catid']],
+					'cat_expamt' => (int)$mybb->input['cat_expamt'.$cat['catid']],
+					'cat_showtids' => (int)$mybb->input['cat_showtids'.$cat['catid']],
+					'cat_allowduplicates' => (int)$mybb->input['cat_allowduplicates'.$cat['catid']]
+				);
+				$db->update_query("expcategories", $cat_array, 'catid="'.$cat['catid'].'"');
 		}
 	}
 }

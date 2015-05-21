@@ -2,14 +2,14 @@
 if(!defined("IN_MYBB"))
 {
     die("You Cannot Access This File Directly. Please Make Sure IN_MYBB Is Defined.");
-} 
+}
 
 /**
  * Install Plugin
  */
 function expmanager_install() {
 	global $db;
-	
+
 	// Make DB Changes
 	// Avoid database errors
 	if ($db->field_exists("expmanage_canSubmit", "forums"))
@@ -26,7 +26,7 @@ function expmanager_install() {
 	}
 	$db->write_query("ALTER TABLE `".TABLE_PREFIX."forums` ADD COLUMN `expmanage_canSubmit` INT(1) NOT NULL DEFAULT '0'");
 	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expsubmissions` (subid int(11) NOT NULL AUTO_INCREMENT, sub_catid int(11), sub_tid int(11), sub_notes varchar(300), sub_uid int(11), sub_approved int(1) NOT NULL DEFAULT 0, sub_finalized int(1) NOT NULL DEFAULT 0, sub_time timestamp default CURRENT_TIMESTAMP, PRIMARY KEY(subid))");
-	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expcategories` (catid int(11) NOT NULL AUTO_INCREMENT, cat_name varchar(200), cat_rules text, cat_threadamt int(11), cat_expamt int(11), cat_showtids int(1), cat_allowduplicates int(1), PRIMARY KEY(catid))");
+	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expcategories` (catid int(11) NOT NULL AUTO_INCREMENT, cat_name varchar(200), cat_rules text, cat_threadamt int(11), cat_expamt int(11), cat_showtids int(1) NOT NULL DEFAULT 1, cat_allowduplicates int(1) NOT NULL DEFAULT 1, PRIMARY KEY(catid))");
 
 	// Create Settings
 	$expmanager_group = array(
@@ -37,10 +37,10 @@ function expmanager_install() {
 			'disporder'    => "1",
 			'isdefault'  => "0",
 	);
-	
+
 	$db->insert_query('settinggroups', $expmanager_group);
 	$gid = $db->insert_id();
-	
+
 	$expmanager_settings[0] = array(
 					'sid'            => 'NULL',
 					'name'        => 'expmanager_postnumrequired',
@@ -51,35 +51,63 @@ function expmanager_install() {
 					'disporder'        => 1,
 					'gid'            => intval($gid),
 			);
-	$expmanager_settings[1] = array(
+      $expmanager_settings[1] = array(
+    					'sid'            => 'NULL',
+    					'name'        => 'expmanager_charcountrequired',
+    					'title'            => 'Character count Required',
+    					'description'    => 'Number of characters required in a post to have it count towards above count (0 to disable/use words).',
+    					'optionscode'    => 'text',
+    					'value'        => '0',
+    					'disporder'        => 2,
+    					'gid'            => intval($gid),
+    			);
+	$expmanager_settings[2] = array(
 					'sid'            => 'NULL',
 					'name'        => 'expmanager_wordcountrequired',
 					'title'            => 'Wordcount Required',
-					'description'    => 'Number of words required in a post to have it count towards above count (0 to disable).',
+					'description'    => 'Number of words required in a post to have it count towards above count (0 to disable, only used if char count is 0).',
 					'optionscode'    => 'text',
 					'value'        => '0',
-					'disporder'        => 2,
+					'disporder'        => 3,
 					'gid'            => intval($gid),
 			);
-	
+      $expmanager_settings[3] = array(
+    					'sid'            => 'NULL',
+    					'name'        => 'expmanager_boardscansubmit',
+    					'title'            => 'Included Boards',
+    					'description'    => 'Ids of boards where EXP can be submitted, overrides forum setting of false (comma-separated).',
+    					'optionscode'    => 'text',
+    					'value'        => '0',
+    					'disporder'        => 4,
+    					'gid'            => intval($gid),
+    			);
+
 	foreach($expmanager_settings as $setting) {
 		$db->insert_query('settings', $setting);
 	}
 	rebuild_settings();
-	
+
 	// Create any Templates
+  //First add the group
+  $templategroup = array(
+    'prefix' => 'expmanage',
+    'title'  => 'EXP Manager',
+    'isdefault' => 1
+  );
+  $db->insert_query("templategroups", $templategroup);
+
 	// Add the new templates
 	$expmanager_templates[0] = array(
 			"title" 	=> "expmanage_submit",
 			"template"	=> $db->escape_string('<a href="javascript:void(0)"  class="button submitexp"><span><i style="font-size: 14px;" class="fa fa-chevron-up  fa-fw"></i> Submit for EXP</span></a>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 		);
 	$expmanager_templates[1] = array(
 			"title" 	=> "expmanage_cp_link",
 			"template"	=> $db->escape_string('<tbody><tr><td class="trow1 smalltext"><a href="{$link}" class="usercp_nav_item modcp_nav_item"><i style="font-size: 14px;" class="fa fa-check-circle-o  fa-fw"></i> View EXP Threads</a></td></tr></tbody>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -121,7 +149,7 @@ function expmanager_install() {
 						{$footer}
 						</body>
 						</html>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -132,7 +160,7 @@ function expmanager_install() {
 						<ol>
 						{$threadlist}
 						</ol>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -142,7 +170,7 @@ function expmanager_install() {
 					<a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>
 					<span class="{$class}">{$thread[\'subject\']}</span>
 					</a> &mdash; <i>({$thread[\'sub_notes\']})</i></li>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -171,7 +199,7 @@ function expmanager_install() {
 						{$footer}
 						</body>
 						</html>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -180,9 +208,9 @@ function expmanager_install() {
 			"template"	=> $db->escape_string('<li><span>
 							<a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>{$thread[\'subject\']}</a>
  								 </span> &mdash; <i>({$thread[\'sub_notes\']})</i>
-  								 &mdash; <a target=\'_blank\' href=\'member.php?action=profile&uid={$submission_user[\'uid\']}\'>{$submission_user[\'username\']}</a> 
+  								 &mdash; <a target=\'_blank\' href=\'member.php?action=profile&uid={$submission_user[\'uid\']}\'>{$submission_user[\'username\']}</a>
 								&mdash; <a href=\'javascript:void(0)\' id=\'{$submission_id}\' class=\'expapprove_button\'>Approve Request</a> | <a href=\'javascript:void(0)\' id=\'{$submission_id}\' class=\'expapprove_button_deny\'>Deny Request</a></li>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -191,7 +219,7 @@ function expmanager_install() {
 			"template"	=> $db->escape_string('<li><span>
   					<input type=\'checkbox\' name=\'submit_cat{$thread[\'sub_catid\']}[]\' value=\'{$submission_id}\'></input><a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>{$thread[\'subject\']}</a>
   					</span> &mdash; <i>{$thread[\'sub_notes\']}</i></li>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -202,9 +230,9 @@ function expmanager_install() {
 						<ol>
 						{$threadlist}
 						</ol>
-						<a href=\'javascript:void(0)\' id=\'{$category[\'catid\']}\' class=\'expfinalize_button button\'>Award EXP for Threads</a> 
+						<a href=\'javascript:void(0)\' id=\'{$category[\'catid\']}\' class=\'expfinalize_button button\'>Award EXP for Threads</a>
 						<a href=\'javascript:void(0)\' id=\'{$category[\'catid\']}\' class=\'expfinalize_button_deny button\'>Deny EXP for Threads</a>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -234,14 +262,14 @@ function expmanager_install() {
 						</tbody></table>
 					</form>
 				</div>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
 	$expmanager_templates[10] = array(
 			"title" 	=> "expmanage_profile_link",
 			"template"	=> $db->escape_string('<tbody><tr><td class="trow1 smalltext"><a href="{$link}" class="usercp_nav_item modcp_nav_item"><i style="font-size: 14px;" class="fa fa-check-circle-o  fa-fw"></i> Manage User\'s EXP Threads</a></td></tr></tbody>'),
-			"sid"		=> -1,
+			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 	);
@@ -295,24 +323,15 @@ function expmanager_deactivate()
 function expmanager_uninstall()
 {
 	global $db;
-	
+
 	// Ensure template edits are reverted
 	require_once MYBB_ROOT."/inc/adminfunctions_templates.php";
 	find_replace_templatesets('showthread', '#{\$newreply}{\$expmanage_submit}#', '{\$newreply}');
 
 	// Delete any templates
-	$db->delete_query("templates", "`title` = 'expmanage_submit'");
-	$db->delete_query("templates", "`title` = 'expmanage_cp_link'");
-	$db->delete_query("templates", "`title` = 'expmanage_fullview'");
-	$db->delete_query("templates", "`title` = 'expmanage_fullview_mod'");
-	$db->delete_query("templates", "`title` = 'expmanage_category'");
-	$db->delete_query("templates", "`title` = 'expmanage_category_usermod'");
-	$db->delete_query("templates", "`title` = 'expmanage_thread'");
-	$db->delete_query("templates", "`title` = 'expmanage_thread_mod'");
-	$db->delete_query("templates", "`title` = 'expmanage_thread_usermod'");
-	$db->delete_query("templates", "`title` = 'expmanage_submit_dialog'");
-	$db->delete_query("templates", "`title` = 'expmanage_profile_link'");
-	
+	$db->delete_query("templates", "`title` LIKE 'expmanage_%'");
+  $db->delete_query("templategroups", "`prefix` = 'expmanage'");
+
 	// Delete any table columns
 	if ($db->field_exists("expmanage_canSubmit", "forums"))
 	{
@@ -326,10 +345,9 @@ function expmanager_uninstall()
 	{
 		$db->write_query("DROP TABLE `".TABLE_PREFIX."expcategories`");
 	}
-	
+
 	// Delete settings
-	$db->query("DELETE FROM ".TABLE_PREFIX."settings WHERE name IN ('expmanager_postnumrequired')");
-	$db->query("DELETE FROM ".TABLE_PREFIX."settings WHERE name IN ('expmanager_wordcountrequired')");
+	$db->query("DELETE FROM ".TABLE_PREFIX."settings WHERE name LIKE 'expmanager_%'");
 	$db->query("DELETE FROM ".TABLE_PREFIX."settinggroups WHERE name='expmanager'");
 	rebuild_settings();
 }

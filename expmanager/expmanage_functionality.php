@@ -7,16 +7,18 @@ $plugins->add_hook("showthread_start", "show_submit_exp");
 
 function show_submit_exp() {
 	global $mybb, $db, $templates, $expmanage_submit, $thread, $footer;
-	
+
 	if(!isset($thread))
 	{
 		$thread = get_thread((int)$mybb->input['tid']);
 	}
-	
+
 	$query = $db->simple_select("forums", "name,expmanage_canSubmit", "fid='".$thread['fid']."'");
 	$parent_forum = $query->fetch_assoc();
-	
-	if($parent_forum['expmanage_canSubmit'] == 1 && validate_thread($thread)) {
+
+	$allowedforums = explode(",", $mybb->settings['expmanager_boardscansubmit']);
+
+	if(($parent_forum['expmanage_canSubmit'] == 1 || in_array($thread['fid'], $allowedforums))&& validate_thread($thread)) {
 		eval("\$expmanage_submit = \"".$templates->get('expmanage_submit')."\";");
 		$category_options = '';
 		$categories = retrieve_available_categories($thread);
@@ -40,32 +42,44 @@ function validate_thread($thread) {
 	while ($post = $query->fetch_assoc()) {
 		$posts[] = $post;
 	}
-	
+
 	// Check if user even posted in thread correct amount
 	$postnum_req = (int)$mybb->settings['expmanager_postnumrequired'];
 	if(($postnum_req != 0 && count($posts) < $postnum_req) || count($posts) == 0) {
 		return false;
 	}
-	
+
 	// Check if it is valid in any exp categories.  if not, no point!
 	if(count(retrieve_available_categories($thread)) == 0) {
 		return false;
 	}
-	
-	//Check word count
+
+	//Check word or character count
+	$charcount_req = (int)$mybb->settings['expmanager_charcountrequired'];
 	$wordcount_req = (int)$mybb->settings['expmanager_wordcountrequired'];
-	if($wordcount_req == 0) {
-		return true; // This check doesn't matter if disabled
-	}
-	$valid_posts = 0;
-	foreach($posts as $post) {
-		$wordarray = explode(' ', $post['message']);
-		if(count($wordarray) >= $wordcount_req) {
-			$valid_posts++;
+	if($charcount_req == 0) {
+		if($wordcount_req == 0) {
+			return true; // This check doesn't matter if disabled
 		}
+		$valid_posts = 0;
+		foreach($posts as $post) {
+			$wordarray = explode(' ', $post['message']);
+			if(count($wordarray) >= $wordcount_req) {
+				$valid_posts++;
+			}
+		}
+
+		return $valid_posts >= $postnum_req;
+	} else {
+		$valid_posts = 0;
+		foreach($posts as $post) {
+			if(strlen($post['message']) >= $charcount_req) {
+				$valid_posts++;
+			}
+		}
+
+		return $valid_posts >= $postnum_req;
 	}
-	
-	return $valid_posts >= $postnum_req;
 }
 
 /**
@@ -84,7 +98,7 @@ function retrieve_available_categories($thread) {
 	if(count($cats_already_in) > 0) {
 		$query2 = $db->simple_select("expcategories", "catid", "catid IN (".implode(',',$cats_already_in).") AND cat_allowduplicates = 0");
 		$no_dup = $db->num_rows > 0;
-		
+
 		// No duplicates in the same category
 		$where = "catid NOT IN (".implode(',',$cats_already_in).")";
 		if($no_dup) {
@@ -92,7 +106,7 @@ function retrieve_available_categories($thread) {
 			$where .= " AND cat_allowduplicates = 1";
 		}
 	}
-	
+
 	$cats_avail = array();
 	$query3 = $db->simple_select("expcategories", "catid, cat_name", $where);
 	while($category = $query3->fetch_assoc()) {
@@ -103,7 +117,7 @@ function retrieve_available_categories($thread) {
 
 /**
  * Handle XMLHTTP requests
- * 
+ *
  */
 $plugins->add_hook('xmlhttp', 'handle_ajax_request');
 
@@ -121,6 +135,8 @@ function handle_ajax_request() {
 	} else if($mybb->input['action'] == 'denyexp') {
 		// Moderator is marking exp as rewarded
 		thread_deny();
+	} else if($mybb->input['action'] == 'createcategory') {
+		create_category();
 	}
 }
 
@@ -129,9 +145,9 @@ function handle_ajax_request() {
  */
 function thread_submission() {
 	global $mybb, $db;
-	
+
 	if(isset($mybb->input['sub_tid']) && isset($mybb->input['sub_catid'])) {
-		//if(valid_submission($mybb->input['sub_tid'], $mybb->input['sub_catid'])) { TODO perhaps
+		//if(valid_submission($mybb->input['sub_tid'], $mybb->input['sub_catid'])) { // Don't really need this, but in case
 			$submission_info = array(
 					'sub_tid' => (int)$mybb->input['sub_tid'],
 					'sub_catid' => (int)$mybb->input['sub_catid'],
@@ -141,11 +157,11 @@ function thread_submission() {
 			$subid = $db->insert_query('expsubmissions', $submission_info);
 	//	}
 	}
-	
+
 }
 
 /**
- * 
+ *
  * NOT CURRENTLY USED!!!  Was going to determine if above submission was valid,
  * but does not work correctly
  */
@@ -157,12 +173,11 @@ function valid_submission($threadid, $catid) {
 
 	foreach(retrieve_available_categories($thread) as $cat) {
 		if((int)$cat['catid'] == $catid) {
-			break;
+			return validate_thread($thread);
 		}
-		return false;
 	}
-	
-	return validate_thread($thread);
+
+	return false;
 }
 
 /**
@@ -172,11 +187,11 @@ function thread_approval() {
 	global $mybb, $db;
 	if(isset($mybb->input['subid'])) {
 		$db->update_query('expsubmissions', array('sub_approved' => 1), 'subid = '.(int)$mybb->input['subid']);
-		
+
 		// Get Category, see if it has a thread amount
 		$query1 = $db->query('SELECT c.catid, c.cat_name, c.cat_threadamt, c.cat_expamt, c.cat_showtids, s.sub_uid FROM '.TABLE_PREFIX.'expcategories c INNER JOIN '.TABLE_PREFIX.'expsubmissions s ON c.catid = s.sub_catid WHERE s.subid = '.(int)$mybb->input['subid']);
 		$category = $query1->fetch_assoc();
-		
+
 		if($category['cat_threadamt'] > 0) {
 			add_reputation($category);
 		}
@@ -220,7 +235,7 @@ function add_reputation($category) {
 				comments => $category['cat_name'].$ids
 		);
 		$rid = $db->insert_query('reputation', $exp_arr);
-	
+
 		// Update Submissions to finalized if reputation goes through
 		if($rid) {
 			$db->update_query('expsubmissions', array('sub_finalized' => 1), $finalized_subs);
@@ -236,7 +251,7 @@ function thread_finalize() {
 	if(isset($mybb->input['sub_catid']) && isset($mybb->input['subids'])) {
 		$query = $db->simple_select('expcategories', 'catid, cat_name, cat_expamt, cat_showtids', 'catid = '.(int)$mybb->input['sub_catid']);
 		$category = $query->fetch_assoc();
-		
+
 		$subid_string = "(".implode(",",$mybb->input['subids']).")";
 
 		$ids = '';
@@ -249,7 +264,7 @@ function thread_finalize() {
 			$ids = substr($ids, 0, strlen($ids)-2);
 			$ids .= ')';
 		}
-		
+
 		// Award EXP
 		$exp_arr = array(
 				uid => (int)$mybb->input['uid'],
@@ -259,12 +274,12 @@ function thread_finalize() {
 				comments => $category['cat_name'].$ids
 		);
 		$rid = $db->insert_query('reputation', $exp_arr);
-		
+
 		// Update Submissions to finalized if reputation goes through
 		if($rid) {
 			$db->update_query('expsubmissions', array('sub_finalized' => 1), 'subid IN '.$subid_string);
 		}
-		
+
 	}
 }
 
@@ -273,14 +288,23 @@ function thread_finalize() {
  */
 function thread_deny() {
 	global $mybb, $db;
-	
+
 	if(isset($mybb->input['subid'])) {
 		// Single thread deny
 		$db->delete_query('expsubmissions', 'subid = '.(int)$mybb->input['subid']);
-		
+
 	} else if(isset($mybb->input['subids'])) {
 		// Multi thread deny
 		$subid_string = "(".implode(",",$mybb->input['subids']).")";
 		$db->delete_query('expsubmissions', 'subid IN '.$subid_string);
 	}
+}
+
+// Create stub category!
+function create_category() {
+	global $db;
+	$newcat = array(
+		'cat_name' => 'Name'
+	);
+	$db->insert_query('expcategories', $newcat);
 }
