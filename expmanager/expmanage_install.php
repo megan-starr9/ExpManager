@@ -25,7 +25,7 @@ function expmanager_install() {
 		$db->write_query("DROP TABLE `".TABLE_PREFIX."expcategories`");
 	}
 	$db->write_query("ALTER TABLE `".TABLE_PREFIX."forums` ADD COLUMN `expmanage_canSubmit` INT(1) NOT NULL DEFAULT '0'");
-	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expsubmissions` (subid int(11) NOT NULL AUTO_INCREMENT, sub_catid int(11), sub_tid int(11), sub_notes varchar(300), sub_uid int(11), sub_approved int(1) NOT NULL DEFAULT 0, sub_finalized int(1) NOT NULL DEFAULT 0, sub_time timestamp default CURRENT_TIMESTAMP, PRIMARY KEY(subid))");
+	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expsubmissions` (subid int(11) NOT NULL AUTO_INCREMENT, sub_catid int(11), sub_tid int(11), sub_notes varchar(300), sub_uid int(11), sub_group int(11), sub_approved int(1) NOT NULL DEFAULT 0, sub_finalized int(1) NOT NULL DEFAULT 0, sub_time timestamp default CURRENT_TIMESTAMP, PRIMARY KEY(subid))");
 	$db->write_query("CREATE TABLE `".TABLE_PREFIX."expcategories` (catid int(11) NOT NULL AUTO_INCREMENT, cat_name varchar(200), cat_rules text, cat_threadamt int(11), cat_expamt int(11), cat_showtids int(1) NOT NULL DEFAULT 1, cat_allowduplicates int(1) NOT NULL DEFAULT 1, PRIMARY KEY(catid))");
 
 	// Create Settings

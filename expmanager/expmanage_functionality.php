@@ -148,10 +148,12 @@ function thread_submission() {
 
 	if(isset($mybb->input['sub_tid']) && isset($mybb->input['sub_catid'])) {
 		//if(valid_submission($mybb->input['sub_tid'], $mybb->input['sub_catid'])) { // Don't really need this, but in case
+			$usergroup = ($mybb->user['displaygroup'] == 0) ? (int)$mybb->user['usergroup'] : (int)$mybb->user['displaygroup'];
 			$submission_info = array(
 					'sub_tid' => (int)$mybb->input['sub_tid'],
 					'sub_catid' => (int)$mybb->input['sub_catid'],
 					'sub_uid' => (int)$mybb->user['uid'],
+					'sub_group' => $usergroup,
 					'sub_notes' => $db->escape_string($mybb->input['sub_notes'])
 			);
 			$subid = $db->insert_query('expsubmissions', $submission_info);

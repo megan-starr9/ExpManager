@@ -1,11 +1,11 @@
 jQuery(document).ready(function($) {
-	
+
 	$(".submitexp").click(function() {
+		console.log("HI");
 		display_submission_form();
 	})
-	
+
 	$(".expsubmit_button").click(function() {
-		
 		var category = $("select[name=sub_catid] option:selected").val();
 		var thread = $("input:hidden[name=sub_tid]").val();
 		var notes = $("textarea[name=sub_notes]").val();
@@ -33,9 +33,9 @@ jQuery(document).ready(function($) {
 			});
 		}
 	});
-	
+
 	$(".expapprove_button").click(function() {
-		
+
 		var submission = $(this).attr('id');
 
 		if(submission) {
@@ -57,9 +57,9 @@ jQuery(document).ready(function($) {
 			});
 		}
 	});
-	
+
 $(".expapprove_button_deny").click(function() {
-		
+
 		var submission = $(this).attr('id');
 
 		if(submission) {
@@ -81,11 +81,11 @@ $(".expapprove_button_deny").click(function() {
 			});
 		}
 	});
-	
+
 	$(".expfinalize_button").click(function() {
-		
+
 		var category = $(this).attr('id');
-		
+
 		var submissions = $("input:checkbox[name=submit_cat"+category+"\\[\\]]:checked").map(function(){
 		      return $(this).val();
 		    }).get();
@@ -111,11 +111,11 @@ $(".expapprove_button_deny").click(function() {
 			});
 		}
 	});
-	
+
 	$(".expfinalize_button_deny").click(function() {
-		
+
 		var category = $(this).attr('id');
-		
+
 		var submissions = $("input:checkbox[name=submit_cat"+category+"\\[\\]]:checked").map(function(){
 		      return $(this).val();
 		    }).get();
@@ -139,10 +139,11 @@ $(".expapprove_button_deny").click(function() {
 			});
 		}
 	});
-	
+
 });
 
 function display_submission_form() {
+	console.log($('#expdialog'));
 	$( "#expdialog" ).dialog({dialogClass: 'modal'});
 }
 
