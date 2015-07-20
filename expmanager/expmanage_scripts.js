@@ -1,7 +1,6 @@
 jQuery(document).ready(function($) {
 
 	$(".submitexp").click(function() {
-		console.log("HI");
 		display_submission_form();
 	})
 
@@ -125,6 +124,7 @@ $(".expapprove_button_deny").click(function() {
 				url: "xmlhttp.php",
 				data: {
 					action : 'denyexp',
+					uid: $.urlParam('uid'),
 					subids : submissions
 				},
 				type: "post",
@@ -140,11 +140,58 @@ $(".expapprove_button_deny").click(function() {
 		}
 	});
 
+	$(".exprequestmoderation_button").click(function() {
+
+		var user = $(this).attr('id');
+
+		if(user) {
+			$.ajax({
+				url: "xmlhttp.php",
+				data: {
+					action : 'requestexpmod',
+					userid : user
+				},
+				type: "post",
+				dataType: 'html',
+				success: function(response){
+					alert("Moderation Request Sent!");
+					location.reload();
+				},
+				error: function(response) {
+					alert("There was an error "+response.responseText);
+				}
+			});
+		}
+	});
+
+	$(".exprequestmoderation_button_cancel").click(function() {
+
+		var user = $(this).attr('id');
+
+		if(user) {
+			$.ajax({
+				url: "xmlhttp.php",
+				data: {
+					action : 'requestexpmod_cancel',
+					userid : user
+				},
+				type: "post",
+				dataType: 'html',
+				success: function(response){
+					alert("Moderation Request Cancelled");
+					location.reload();
+				},
+				error: function(response) {
+					alert("There was an error "+response.responseText);
+				}
+			});
+		}
+	});
+
 });
 
 function display_submission_form() {
-	console.log($('#expdialog'));
-	$( "#expdialog" ).dialog({dialogClass: 'modal'});
+	$("#expdialog").dialog({dialogClass: 'modal'});
 }
 
 $.urlParam = function(name){

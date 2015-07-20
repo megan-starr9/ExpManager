@@ -34,27 +34,42 @@ function expmanager_usercp()
 	if ($mybb->input['action'] == "expmanager")
 	{
 		$exp_submissions = '';
+		$catselect = 'catid, cat_name, cat_expamt, cat_rules';
+		$subselect = 'et.subid, et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved, et.sub_otherposters';
+
 		$categories = array();
-		$query = $db->simple_select('expcategories', 'catid, cat_name, cat_expamt, cat_rules', 'EXISTS (SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_uid = '.$mybb->user['uid'].' AND sub_catid = catid)');
+		$query = $db->simple_select('expcategories', $catselect, 'EXISTS (SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_uid = '.$mybb->user['uid'].' AND sub_catid = catid)');
 		while ($category = $query->fetch_assoc()) {
 			$categories[] = $category;
 		}
 
+		$threads = array();
+		$query2 = $db->simple_select('expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid', $subselect,  'et.sub_uid = '.$mybb->user['uid']);
+		while ($thread = $query2->fetch_assoc()) {
+			if(!is_array($threads[$thread['sub_catid']])) {
+				$threads[$thread['sub_catid']] = array($thread);
+			} else {
+				$threads[$thread['sub_catid']][] = $thread;
+			}
+		}
+
 		//Build category list
 		foreach($categories as $category) {
-
-			$threads = array();
-			$query2 = $db->query('SELECT et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved FROM '.TABLE_PREFIX.'expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid WHERE et.sub_uid = '.$mybb->user['uid'].' AND et.sub_catid = '.$category['catid']);
-			while ($thread = $query2->fetch_assoc()) {
-				$threads[] = $thread;
-			}
 			//Build threadlist for category
-			foreach($threads as $thread) {
+			foreach($threads[$category['catid']] as $thread) {
 				$class = 'submitted';
 				if($thread['sub_finalized']) {
 					$class = 'exp_applied';
 				} else if($thread['sub_approved']) {
 					$class = 'approved';
+				}
+				$otherposters = json_decode($thread['sub_otherposters']);
+				$submission_otherposters = '';
+				foreach($otherposters as $key => $value) {
+					if(strlen($submission_otherposters) > 0 ) {
+						$submission_otherposters .= ', ';
+					}
+					$submission_otherposters .= $key.'('.$value.')';
 				}
 				eval("\$threadlist .= \"".$templates->get('expmanage_thread')."\";");
 			}
@@ -110,47 +125,79 @@ function expmanager_modcp() {
 
 		if(isset($mybb->input['uid'])) {
 			// Manage more difficult EXP awards (those that aren't simply # of threads)
-			exp_manage_user();
+			$userid = (int)$mybb->input['uid'];
+			exp_manage_user($userid);
+			eval("\$expmanage_fullview_mod = \"".$templates->get('expmanage_fullview_usermod')."\";");
 
 		} else {
 			// General EXP Approval
 			exp_manage_approval();
-
+			eval("\$expmanage_fullview_mod = \"".$templates->get('expmanage_fullview_mod')."\";");
 		}
-
-		eval("\$expmanage_fullview_mod = \"".$templates->get('expmanage_fullview_mod')."\";");
 
 		output_page($expmanage_fullview_mod);
 	}
 }
 
-function exp_manage_user() {
+function exp_manage_user($userid) {
 	global $mybb, $db, $templates, $exp_submissions;
 
-	$userid = (int)$mybb->input['uid'];
+	$catselect = 'catid, cat_name, cat_expamt, cat_rules, cat_threadamt';
+	$subselect = 'et.subid, et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved, et.sub_otherposters';
 
 	$categories = array();
-	$query = $db->simple_select('expcategories', 'catid, cat_name, cat_expamt, cat_rules', 'cat_threadamt = 0 AND EXISTS(SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_catid = catid AND sub_approved = 1 AND sub_finalized = 0 AND sub_uid = '.$userid.')');
+	$query = $db->simple_select('expcategories', $catselect, 'EXISTS(SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_catid = catid AND sub_uid = '.$userid.')');
 	while($category = $query->fetch_assoc()) {
 		$categories[] = $category;
 	}
 
+	$threads = array();
+	$query2 = $db->simple_select('expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid', $subselect, 'et.sub_uid = '.$userid);
+	while ($thread = $query2->fetch_assoc()) {
+		if(!is_array($threads[$thread['sub_catid']])) {
+			$threads[$thread['sub_catid']] = array($thread);
+		} else {
+			$threads[$thread['sub_catid']][] = $thread;
+		}
+	}
+
 	//Build category list
 	foreach($categories as $category) {
-
-		$threads = array();
-		$query2 = $db->query('SELECT et.subid, et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved FROM '.TABLE_PREFIX.'expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid WHERE et.sub_uid = '.$userid.' AND et.sub_catid = '.$category['catid'].' AND et.sub_approved = 1 AND et.sub_finalized = 0');
-		while ($thread = $query2->fetch_assoc()) {
-			$threads[] = $thread;
-		}
 		//Build threadlist for category
-		foreach($threads as $thread) {
+		foreach($threads[$category['catid']] as $thread) {
+			if($thread['sub_finalized']) {
+				$class = 'exp_applied';
+			} else if($thread['sub_approved']) {
+				$class = 'approved';
+			} else {
+				$class = 'submitted';
+			}
 			// Workaround cuz MYBB hates me ><
 			$submission_id = $thread['subid'];
-			eval("\$threadlist .= \"".$templates->get('expmanage_thread_usermod')."\";");
+			$otherposters = json_decode($thread['sub_otherposters']);
+			$submission_otherposters = '';
+			foreach($otherposters as $key => $value) {
+				if(strlen($submission_otherposters) > 0 ) {
+					$submission_otherposters .= ', ';
+				}
+				$submission_otherposters .= $key.'('.$value.')';
+			}
+			$action = "";
+			if($thread['sub_approved'] && !$thread['sub_finalized'] && $category['cat_threadamt'] == 0) {
+				$action = '<input type=\'checkbox\' name=\'submit_cat'.$thread['sub_catid'].'[]\' value=\''.$submission_id.'\'></input>';
+			}
+			if($category['cat_threadamt'] == 0) {
+				eval("\$threadlist .= \"".$templates->get('expmanage_thread_usermod')."\";");
+			} else {
+				eval("\$threadlist .= \"".$templates->get('expmanage_thread')."\";");
+			}
+		}
+		if($category['cat_threadamt'] == 0) {
+			eval("\$exp_submissions .= \"".$templates->get('expmanage_category_usermod')."\";");
+		} else {
+			eval("\$exp_submissions .= \"".$templates->get('expmanage_category')."\";");
 		}
 
-		eval("\$exp_submissions .= \"".$templates->get('expmanage_category_usermod')."\";");
 		eval("\$threadlist = \"\";");
 	}
 }
@@ -158,29 +205,44 @@ function exp_manage_user() {
 function exp_manage_approval() {
 	global $mybb, $db, $templates, $exp_submissions;
 
+	$catselect = 'catid, cat_name, cat_expamt, cat_rules';
+	$subselect = 'et.subid, et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved, et.sub_otherposters';
+
 	$categories = array();
-	$query = $db->simple_select('expcategories', 'catid, cat_name, cat_expamt, cat_rules', 'EXISTS(SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_catid = catid AND sub_approved = 0)');
+	$query = $db->simple_select('expcategories', $catselect, 'EXISTS(SELECT sub_catid FROM '.TABLE_PREFIX.'expsubmissions WHERE sub_catid = catid AND sub_approved = 0)');
 	while ($category = $query->fetch_assoc()) {
 		$categories[] = $category;
 	}
 
+	$threads = array();
+	$query2 = $db->simple_select('expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid', $subselect, 'et.sub_approved = 0');
+	while ($thread = $query2->fetch_assoc()) {
+		if(!is_array($threads[$thread['sub_catid']])) {
+			$threads[$thread['sub_catid']] = array($thread);
+		} else {
+			$threads[$thread['sub_catid']][] = $thread;
+		}
+	}
+
 	//Build category list
 	foreach($categories as $category) {
-
-		$threads = array();
-		$query2 = $db->query('SELECT et.subid, et.sub_catid, et.sub_uid, t.tid, t.subject, et.sub_notes, et.sub_finalized, et.sub_approved FROM '.TABLE_PREFIX.'expsubmissions et INNER JOIN '.TABLE_PREFIX.'threads t ON t.tid = et.sub_tid WHERE et.sub_catid = '.$category['catid'].' AND et.sub_approved = 0');
-		while ($thread = $query2->fetch_assoc()) {
-			$threads[] = $thread;
-		}
 		//Build threadlist for category
-		foreach($threads as $thread) {
+		foreach($threads[$category['catid']] as $thread) {
 			// Workaround cuz MYBB hates me ><
 			$submission_id = $thread['subid'];
 			$submission_user = get_user($thread['sub_uid']);
+			$otherposters = json_decode($thread['sub_otherposters']);
+			$submission_otherposters = '';
+			foreach($otherposters as $key => $value) {
+				if(strlen($submission_otherposters) > 0 ) {
+					$submission_otherposters .= ', ';
+				}
+				$submission_otherposters .= $key.'('.$value.')';
+			}
 			eval("\$threadlist .= \"".$templates->get('expmanage_thread_mod')."\";");
 		}
 
-		eval("\$exp_submissions .= \"".$templates->get('expmanage_category')."\";");
+		eval("\$exp_submissions .= \"".$templates->get('expmanage_category_mod')."\";");
 		eval("\$threadlist = \"\";");
 	}
 }

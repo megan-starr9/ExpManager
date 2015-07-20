@@ -37,7 +37,13 @@ function show_submit_exp() {
 function validate_thread($thread) {
 	global $mybb, $db;
 
-	$query = $db->simple_select("posts", "pid, message", "tid = ". $thread['tid'] ." AND username = '". $mybb->user['username'] ."'");
+	// check if total number of posts is acceptable
+	$countquery = $db->simple_select("posts", "pid, message", "tid = ". $thread['tid'] ." AND visible = 1");
+	if($db->num_rows($countquery) < (int)$mybb->settings['expmanager_postnum_total']) {
+		return false;
+	}
+
+	$query = $db->simple_select("posts", "pid, message", "tid = ". $thread['tid'] ." AND username = '". $mybb->user['username'] ."' AND visible = 1");
 	$posts = array();
 	while ($post = $query->fetch_assoc()) {
 		$posts[] = $post;
@@ -57,29 +63,58 @@ function validate_thread($thread) {
 	//Check word or character count
 	$charcount_req = (int)$mybb->settings['expmanager_charcountrequired'];
 	$wordcount_req = (int)$mybb->settings['expmanager_wordcountrequired'];
-	if($charcount_req == 0) {
-		if($wordcount_req == 0) {
-			return true; // This check doesn't matter if disabled
-		}
-		$valid_posts = 0;
-		foreach($posts as $post) {
+	$valid_posts = 0;
+	foreach($posts as $post) {
+		if($charcount_req != 0) {
+			if(strlen($post['message']) >= $charcount_req) {
+				$valid_posts++;
+			}
+		} else if($wordcount_req != 0) {
 			$wordarray = explode(' ', $post['message']);
 			if(count($wordarray) >= $wordcount_req) {
 				$valid_posts++;
 			}
+		} else {
+			return true; // check doesn't matter if neither is set
 		}
-
-		return $valid_posts >= $postnum_req;
-	} else {
-		$valid_posts = 0;
-		foreach($posts as $post) {
-			if(strlen($post['message']) >= $charcount_req) {
-				$valid_posts++;
-			}
-		}
-
-		return $valid_posts >= $postnum_req;
 	}
+	return $valid_posts >= $postnum_req;
+}
+
+/*
+* Get count of valid posts per character
+*/
+function get_other_char_posts($threadid) {
+	global $mybb, $db;
+
+	$query = $db->simple_select("posts", "pid, message,username", "tid = ". $threadid ." AND username <> '". $mybb->user['username'] ."' AND visible = 1");
+	$posts = array();
+	while ($post = $query->fetch_assoc()) {
+		$posts[] = $post;
+	}
+
+	$charcount_req = (int)$mybb->settings['expmanager_charcountrequired'];
+	$wordcount_req = (int)$mybb->settings['expmanager_wordcountrequired'];
+	$charposts = array();
+	// Get count of valid posts by each character, checking word/character counts
+	foreach($posts as $post) {
+		if(!isset($charposts[$post['username']])) {
+			$charposts[$post['username']] = 0;
+		}
+		if($charcount_req != 0) {
+			if(strlen($post['message']) >= $charcount_req) {
+				$charposts[$post['username']] += 1;
+			}
+		} else if($wordcount_req != 0) {
+			$wordarray = explode(' ', $post['message']);
+			if(count($wordarray) >= $wordcount_req) {
+				$charposts[$post['username']] += 1;
+			}
+		} else {
+			$charposts[$post['username']] += 1;
+		}
+	}
+	return $charposts;
 }
 
 /**
@@ -116,6 +151,38 @@ function retrieve_available_categories($thread) {
 }
 
 /**
+* Figure alerts!
+*/
+$plugins->add_hook('global_intermediate', 'add_alert');
+
+function add_alert() {
+	global $db,$mybb,$templates,$expmanage_requests;
+
+	$allowedgroups = array(3,4,6);
+	if($mybb->settings['expmanager_usenotifications'] && isset($mybb->user) && (in_array($mybb->user['usergroup'], $allowedgroups)
+					|| count(array_intersect($allowedgroups, explode(',', $mybb->user['additionalgroups']))) > 0)) {
+		$expmanage_alert_text = "";
+			// Get any undealt with submissions
+		$need_accept = $db->simple_select("expsubmissions", "subid", "sub_approved = '0'");
+		if($db->num_rows($need_accept) > 0) {
+			$expmanage_alert_text = "There are EXP submissions that need moderating.  Go to <a href='modcp.php?action=expmanager'>EXP Management</a>.";
+		}
+
+		// Now get any user requests for moderation
+		$requested_mod = $db->simple_select("expmodrequests r INNER JOIN ".TABLE_PREFIX."users u ON r.uid = u.uid", "u.uid, u.username");
+		while($req = $requested_mod->fetch_assoc()) {
+			if(strlen($expmanage_alert_text) > 0) {
+				$expmanage_alert_text .= "<br>";
+			}
+			$expmanage_alert_text .= "User <b>".$req['username']."</b> has requested EXP moderation.  Go to <a href='modcp.php?action=expmanager&uid=".$req['uid']."'>their EXP Management</a>.";
+		}
+		if(strlen($expmanage_alert_text) > 0) {
+			eval("\$expmanage_requests = \"".$templates->get('expmanage_alert')."\";");
+		}
+	}
+}
+
+/**
  * Handle XMLHTTP requests
  *
  */
@@ -137,6 +204,10 @@ function handle_ajax_request() {
 		thread_deny();
 	} else if($mybb->input['action'] == 'createcategory') {
 		create_category();
+	} else if($mybb->input['action'] == 'requestexpmod') {
+		request_moderation();
+	}  else if($mybb->input['action'] == 'requestexpmod_cancel') {
+		cancel_moderation();
 	}
 }
 
@@ -154,7 +225,8 @@ function thread_submission() {
 					'sub_catid' => (int)$mybb->input['sub_catid'],
 					'sub_uid' => (int)$mybb->user['uid'],
 					'sub_group' => $usergroup,
-					'sub_notes' => $db->escape_string($mybb->input['sub_notes'])
+					'sub_notes' => $db->escape_string($mybb->input['sub_notes']),
+					'sub_otherposters' => json_encode(get_other_char_posts((int)$mybb->input['sub_tid']))
 			);
 			$subid = $db->insert_query('expsubmissions', $submission_info);
 	//	}
@@ -280,6 +352,8 @@ function thread_finalize() {
 		// Update Submissions to finalized if reputation goes through
 		if($rid) {
 			$db->update_query('expsubmissions', array('sub_finalized' => 1), 'subid IN '.$subid_string);
+			// remove any requests user has sent
+			$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['uid']);
 		}
 
 	}
@@ -299,6 +373,31 @@ function thread_deny() {
 		// Multi thread deny
 		$subid_string = "(".implode(",",$mybb->input['subids']).")";
 		$db->delete_query('expsubmissions', 'subid IN '.$subid_string);
+		// remove any requests user has sent
+		$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['uid']);
+	}
+}
+
+/**
+ * Request moderation / cancel a moderation request on user's EXP
+ */
+function request_moderation() {
+	global $mybb, $db;
+
+	if($mybb->settings['expmanager_usenotifications']) {
+		if(isset($mybb->input['userid'])) {
+			// Create a notification for moderators!
+			$db->insert_query('expmodrequests', array('uid' => (int)$mybb->input['userid']));
+		}
+	}
+}
+
+function cancel_moderation() {
+	global $mybb, $db;
+
+	if(isset($mybb->input['userid'])) {
+		// Create a notification for moderators!
+		$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['userid']);
 	}
 }
 
