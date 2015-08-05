@@ -214,6 +214,8 @@ function handle_ajax_request() {
 		request_moderation();
 	}  else if($mybb->input['action'] == 'requestexpmod_cancel') {
 		cancel_moderation();
+	} else if($mybb->input['action'] == 'expeditingonclick') {
+		editing_value_onclick();
 	}
 }
 
@@ -412,6 +414,20 @@ function cancel_moderation() {
 	if(isset($mybb->input['userid'])) {
 		// Cancel mod notification
 		$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['userid']);
+	}
+}
+
+/**
+ *
+ */
+function editing_value_onclick() {
+	global $mybb, $db;
+	if(isset($mybb->input['element_id']) && isset($mybb->input['element_type']) && isset($mybb->input['element_value'])) {
+		$value = $mybb->input['element_value'];
+		if($mybb->input['element_type'] == 'sub_notes') {
+			// User entered new value for a submission's notes!
+			$db->update_query('expsubmissions', array('sub_notes' => $value), 'subid='.(int)$mybb->input['element_id']);
+		}
 	}
 }
 

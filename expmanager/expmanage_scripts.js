@@ -230,6 +230,35 @@ function display_markingawarded_form() {
 	$("#expdialog2").dialog({dialogClass: 'modal'});
 }
 
+$('.expmanager_editonclick').dblclick(function() {
+	$(this).attr('contenteditable', 'true');
+})
+$('.expmanager_editonclick').focusout(function() {
+	$(this).attr('contenteditable', 'false');
+	var id = $(this).attr('id');
+	var type = $(this).attr('name');
+	var value = $(this).text();
+	if(id && type && value) {
+		$.ajax({
+			url: "xmlhttp.php",
+			data: {
+				action : 'expeditingonclick',
+				element_type: type,
+				element_id : id,
+				element_value : value
+			},
+			type: "post",
+			dataType: 'html',
+			success: function(response){
+				console.log(type+' value saved!')
+			},
+			error: function(response) {
+				alert("There was an error "+response.responseText);
+			}
+		});
+	}
+})
+
 $.urlParam = function(name){
     var results = new RegExp('[\?&]' + name + '=([^&#]*)').exec(window.location.href);
     if (results==null){

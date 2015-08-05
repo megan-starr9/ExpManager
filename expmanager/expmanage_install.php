@@ -222,7 +222,7 @@ function expmanager_install() {
 			"title" 	=> "expmanage_thread",
 			"template"	=> $db->escape_string('<tr class=\'{$class}\'>
 	<td><a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>{$thread[\'subject\']}</a></td>
-	<td><i>{$thread[\'sub_notes\']}</i></td>
+	<td id=\'{$thread[\'subid\']}\' name=\'sub_notes\' class=\'expmanager_editonclick\'><i>{$thread[\'sub_notes\']}</i></td>
 	<td> {$submission_otherposters}</td>
 </tr>'),
 			"sid"		=> -2,
@@ -262,7 +262,7 @@ function expmanager_install() {
 			"title" 	=> "expmanage_thread_mod",
 			"template"	=> $db->escape_string('<tr>
 	<td><a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>{$thread[\'subject\']}</a></td>
-	<td><i>{$thread[\'sub_notes\']}</i></td>
+	<td id=\'{$thread[\'subid\']}\' name=\'sub_notes\' class=\'expmanager_editonclick\'><i>{$thread[\'sub_notes\']}</i></td>
   	<td><a target=\'_blank\' href=\'member.php?action=profile&uid={$submission_user[\'uid\']}\'>{$submission_user[\'username\']}</a></td>
 	<td>{$submission_otherposters}</td>
 	<td><a href=\'javascript:void(0)\' id=\'{$submission_id}\' class=\'expapprove_button\'>Approve Request</a>
@@ -277,7 +277,7 @@ function expmanager_install() {
 			"template"	=> $db->escape_string('<tr class=\'{$class}\'>
 	<td>{$action}</td>
 	<td><a target=\'_blank\' href=\'showthread.php?tid={$thread[\'tid\']}\'>{$thread[\'subject\']}</a></td>
-	<td><i>{$thread[\'sub_notes\']}</i></td>
+	<td id=\'{$thread[\'subid\']}\' name=\'sub_notes\' class=\'expmanager_editonclick\'><i>{$thread[\'sub_notes\']}</i></td>
 	<td>{$submission_otherposters}</td>
 </tr>'),
 			"sid"		=> -2,
