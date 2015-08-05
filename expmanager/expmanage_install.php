@@ -416,7 +416,7 @@ function expmanager_install() {
 					<form>
 					<table style="padding: 0px;" class="tborder" border="0" cellpadding="5" cellspacing="0" width="100%">
 						<tbody><tr>
-						<td class="thead" colspan="2"><strong>Submit Thread for Exp</strong></td>
+						<td class="thead" colspan="2"><strong>Mark Thread as Awarded</strong></td>
 						</tr>
 						<tr>
 						<td class="trow1" style="text-shadow: 1px 1px 0px #000;" width="25%"><strong>EXP Category:</strong></td>
