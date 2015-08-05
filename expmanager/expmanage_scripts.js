@@ -5,16 +5,16 @@ jQuery(document).ready(function($) {
 	})
 
 	$(".expsubmit_button").click(function() {
-		var category = $("select[name=sub_catid] option:selected").val();
-		var thread = $("input:hidden[name=sub_tid]").val();
-		var notes = $("textarea[name=sub_notes]").val();
+		var categories = $("#expdialog select[name=sub_catid\\[\\]]").val();
+		var thread = $("#expdialog input:hidden[name=sub_tid]").val();
+		var notes = $("#expdialog textarea[name=sub_notes]").val();
 
-		if(category && thread) {
+		if(categories && thread) {
 			$.ajax({
 				url: "xmlhttp.php",
 				data: {
 					action : 'submitexp',
-					sub_catid: category,
+					sub_catid: JSON.stringify(categories),
 					sub_tid : thread,
 					sub_notes : notes
 				},
@@ -23,7 +23,40 @@ jQuery(document).ready(function($) {
 				success: function(response){
 					alert("EXP Submission Complete");
 					$("#expdialog").dialog("close");
-					$("textarea[name=sub_notes]").val('');
+					$("#expdialog textarea[name=sub_notes]").val('');
+					location.reload();
+				},
+				error: function(response) {
+					alert("There was an error "+response.responseText);
+				}
+			});
+		}
+	});
+
+	$(".markexpawarded").click(function() {
+		display_markingawarded_form();
+	})
+
+	$(".expmark_button").click(function() {
+		var categories = $("#expdialog2 select[name=sub_catid\\[\\]]").val();
+		var thread = $("#expdialog2 input:hidden[name=sub_tid]").val();
+		var notes = $("#expdialog2 textarea[name=sub_notes]").val();
+
+		if(categories && thread) {
+			$.ajax({
+				url: "xmlhttp.php",
+				data: {
+					action : 'markexp',
+					sub_catid: JSON.stringify(categories),
+					sub_tid : thread,
+					sub_notes : notes
+				},
+				type: "post",
+				dataType: 'html',
+				success: function(response){
+					alert("EXP Marked as Awarded");
+					$("#expdialog2").dialog("close");
+					$("#expdialog2 textarea[name=sub_notes]").val('');
 					location.reload();
 				},
 				error: function(response) {
@@ -192,6 +225,9 @@ $(".expapprove_button_deny").click(function() {
 
 function display_submission_form() {
 	$("#expdialog").dialog({dialogClass: 'modal'});
+}
+function display_markingawarded_form() {
+	$("#expdialog2").dialog({dialogClass: 'modal'});
 }
 
 $.urlParam = function(name){

@@ -18,14 +18,14 @@ function show_submit_exp() {
 
 	$allowedforums = explode(",", $mybb->settings['expmanager_boardscansubmit']);
 
-	if(($parent_forum['expmanage_canSubmit'] == 1 || in_array($thread['fid'], $allowedforums))&& validate_thread($thread)) {
-		eval("\$expmanage_submit = \"".$templates->get('expmanage_submit')."\";");
+	if(($parent_forum['expmanage_canSubmit'] == 1 || in_array($thread['fid'], $allowedforums))&& validate_thread($thread, $categories)) {
+		eval("\$expmanage_submit = \"".$templates->get('expmanage_buttons_submit')."\";");
 		$category_options = '';
-		$categories = retrieve_available_categories($thread);
 		foreach($categories as $category) {
 			$category_options .= '<option value="'.$category['catid'].'">'.$category['cat_name'].'</option>';
 		}
-		eval("\$dialog = \"".$templates->get('expmanage_submit_dialog')."\";");
+		eval("\$dialog = \"".$templates->get('expmanage_dialog_submit')."\";");
+		eval("\$dialog .= \"".$templates->get('expmanage_dialog_markawarded')."\";");
 		$footer .= $dialog;
 	}
 }
@@ -33,8 +33,9 @@ function show_submit_exp() {
 /*
  * Ensure thread is valid for Exp
  * We only show the submit button if it is!
+ * (Because we need to get a category count, this is also where we populate category options)
  */
-function validate_thread($thread) {
+function validate_thread($thread, &$categories) {
 	global $mybb, $db;
 
 	// check if total number of posts is acceptable
@@ -56,7 +57,8 @@ function validate_thread($thread) {
 	}
 
 	// Check if it is valid in any exp categories.  if not, no point!
-	if(count(retrieve_available_categories($thread)) == 0) {
+	$categories = retrieve_available_categories($thread);
+	if(count($categories) == 0) {
 		return false;
 	}
 
@@ -158,12 +160,13 @@ $plugins->add_hook('global_intermediate', 'add_alert');
 function add_alert() {
 	global $db,$mybb,$templates,$expmanage_requests;
 
-	$allowedgroups = array(3,4,6);
+	$setting_groups = explode(',', $mybb->settings['expmanager_notifygroups']);
+	$allowedgroups = (sizeof($setting_groups) > 0) ? $setting_groups : array(3,4,6);
 	if($mybb->settings['expmanager_usenotifications'] && isset($mybb->user) && (in_array($mybb->user['usergroup'], $allowedgroups)
 					|| count(array_intersect($allowedgroups, explode(',', $mybb->user['additionalgroups']))) > 0)) {
 		$expmanage_alert_text = "";
 			// Get any undealt with submissions
-		$need_accept = $db->simple_select("expsubmissions", "subid", "sub_approved = '0'");
+		$need_accept = $db->simple_select("expsubmissions", "subid", "sub_approved = '0' AND sub_finalized = '0'");
 		if($db->num_rows($need_accept) > 0) {
 			$expmanage_alert_text = "There are EXP submissions that need moderating.  Go to <a href='modcp.php?action=expmanager'>EXP Management</a>.";
 		}
@@ -202,6 +205,9 @@ function handle_ajax_request() {
 	} else if($mybb->input['action'] == 'denyexp') {
 		// Moderator is marking exp as rewarded
 		thread_deny();
+	} else if($mybb->input['action'] == 'markexp') {
+		//User is marking thread as awarded previously
+		thread_mark_finalized();
 	} else if($mybb->input['action'] == 'createcategory') {
 		create_category();
 	} else if($mybb->input['action'] == 'requestexpmod') {
@@ -218,40 +224,21 @@ function thread_submission() {
 	global $mybb, $db;
 
 	if(isset($mybb->input['sub_tid']) && isset($mybb->input['sub_catid'])) {
-		//if(valid_submission($mybb->input['sub_tid'], $mybb->input['sub_catid'])) { // Don't really need this, but in case
-			$usergroup = ($mybb->user['displaygroup'] == 0) ? (int)$mybb->user['usergroup'] : (int)$mybb->user['displaygroup'];
-			$submission_info = array(
-					'sub_tid' => (int)$mybb->input['sub_tid'],
-					'sub_catid' => (int)$mybb->input['sub_catid'],
-					'sub_uid' => (int)$mybb->user['uid'],
-					'sub_group' => $usergroup,
-					'sub_notes' => $db->escape_string($mybb->input['sub_notes']),
-					'sub_otherposters' => json_encode(get_other_char_posts((int)$mybb->input['sub_tid']))
-			);
+		$usergroup = ($mybb->user['displaygroup'] == 0) ? (int)$mybb->user['usergroup'] : (int)$mybb->user['displaygroup'];
+		$submission_info = array(
+				'sub_tid' => (int)$mybb->input['sub_tid'],
+				'sub_uid' => (int)$mybb->user['uid'],
+				'sub_group' => $usergroup,
+				'sub_notes' => $db->escape_string($mybb->input['sub_notes']),
+				'sub_otherposters' => json_encode(get_other_char_posts((int)$mybb->input['sub_tid']))
+		);
+		$categories = json_decode($mybb->input['sub_catid']);
+		foreach($categories as $id => $category) {
+			$submission_info['sub_catid'] = (int)$category;
 			$subid = $db->insert_query('expsubmissions', $submission_info);
-	//	}
-	}
-
-}
-
-/**
- *
- * NOT CURRENTLY USED!!!  Was going to determine if above submission was valid,
- * but does not work correctly
- */
-function valid_submission($threadid, $catid) {
-	global $mybb, $db, $thread;
-	if(!isset($thread)) {
-		$thread = get_thread($threadid);
-	}
-
-	foreach(retrieve_available_categories($thread) as $cat) {
-		if((int)$cat['catid'] == $catid) {
-			return validate_thread($thread);
 		}
 	}
 
-	return false;
 }
 
 /**
@@ -266,7 +253,7 @@ function thread_approval() {
 		$query1 = $db->query('SELECT c.catid, c.cat_name, c.cat_threadamt, c.cat_expamt, c.cat_showtids, s.sub_uid FROM '.TABLE_PREFIX.'expcategories c INNER JOIN '.TABLE_PREFIX.'expsubmissions s ON c.catid = s.sub_catid WHERE s.subid = '.(int)$mybb->input['subid']);
 		$category = $query1->fetch_assoc();
 
-		if($category['cat_threadamt'] > 0) {
+		if($category['cat_threadamt'] > 0 && $mybb->settings['expmanager_autoaward']) {
 			add_reputation($category);
 		}
 	}
@@ -340,17 +327,19 @@ function thread_finalize() {
 		}
 
 		// Award EXP
-		$exp_arr = array(
-				uid => (int)$mybb->input['uid'],
-				adduid => (int)$mybb->user['uid'],
-				reputation => $category['cat_expamt'],
-				dateline => TIME_NOW,
-				comments => $category['cat_name'].$ids
-		);
-		$rid = $db->insert_query('reputation', $exp_arr);
+		if($mybb->settings['expmanager_autoaward']) {
+			$exp_arr = array(
+					uid => (int)$mybb->input['uid'],
+					adduid => (int)$mybb->user['uid'],
+					reputation => $category['cat_expamt'],
+					dateline => TIME_NOW,
+					comments => $category['cat_name'].$ids
+			);
+			$rid = $db->insert_query('reputation', $exp_arr);
+		}
 
 		// Update Submissions to finalized if reputation goes through
-		if($rid) {
+		if($rid || !$mybb->settings['expmanager_autoaward']) {
 			$db->update_query('expsubmissions', array('sub_finalized' => 1), 'subid IN '.$subid_string);
 			// remove any requests user has sent
 			$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['uid']);
@@ -379,6 +368,31 @@ function thread_deny() {
 }
 
 /**
+* User is marking their own thread as having been awarded previously
+*/
+function thread_mark_finalized() {
+	global $mybb, $db;
+
+	if(isset($mybb->input['sub_tid']) && isset($mybb->input['sub_catid'])) {
+		//$usergroup = ($mybb->user['displaygroup'] == 0) ? (int)$mybb->user['usergroup'] : (int)$mybb->user['displaygroup'];
+		$submission_info = array(
+				'sub_tid' => (int)$mybb->input['sub_tid'],
+				'sub_uid' => (int)$mybb->user['uid'],
+				'sub_group' => -1,
+				'sub_notes' => $db->escape_string($mybb->input['sub_notes']),
+				'sub_otherposters' => json_encode(get_other_char_posts((int)$mybb->input['sub_tid'])),
+				'sub_approved' => 0,
+				'sub_finalized' => 1
+		);
+		$categories = json_decode($mybb->input['sub_catid']);
+		foreach($categories as $id => $category) {
+			$submission_info['sub_catid'] = (int)$category;
+			$subid = $db->insert_query('expsubmissions', $submission_info);
+		}
+	}
+}
+
+/**
  * Request moderation / cancel a moderation request on user's EXP
  */
 function request_moderation() {
@@ -396,7 +410,7 @@ function cancel_moderation() {
 	global $mybb, $db;
 
 	if(isset($mybb->input['userid'])) {
-		// Create a notification for moderators!
+		// Cancel mod notification
 		$db->delete_query('expmodrequests', 'uid = '.(int)$mybb->input['userid']);
 	}
 }

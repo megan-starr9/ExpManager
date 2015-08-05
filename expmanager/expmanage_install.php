@@ -106,6 +106,26 @@ function expmanager_install() {
       				'disporder'        => 6,
       				'gid'            => intval($gid),
       		);
+        $expmanager_settings[6] = array(
+          'sid'            => 'NULL',
+          'name'        => 'expmanager_notifygroups',
+          'title'            => 'Groups to Notify',
+          'description'    => 'Groups to display exp notifications to (if none are provided, will be Mods and Admins)',
+          'optionscode'    => 'text',
+          'value'        => '',
+          'disporder'        => 7,
+          'gid'            => intval($gid),
+        );
+        $expmanager_settings[7] = array(
+          'sid'            => 'NULL',
+          'name'        => 'expmanager_autoaward',
+          'title'            => 'Auto-award EXP?',
+          'description'    => 'Master switch for auto-awarding.  If set to no, all reputation will be managed manually.',
+          'optionscode'    => 'yesno',
+          'value'        => '',
+          'disporder'        => 8,
+          'gid'            => intval($gid),
+        );
 
 	foreach($expmanager_settings as $setting) {
 		$db->insert_query('settings', $setting);
@@ -123,14 +143,15 @@ function expmanager_install() {
 
 	// Add the new templates
 	$expmanager_templates[0] = array(
-			"title" 	=> "expmanage_submit",
-			"template"	=> $db->escape_string('<a href="javascript:void(0)"  class="button submitexp"><span><i style="font-size: 14px;" class="fa fa-chevron-up  fa-fw"></i> Submit for EXP</span></a>'),
+			"title" 	=> "expmanage_buttons_submit",
+			"template"	=> $db->escape_string('<a href="javascript:void(0)"  class="button submitexp"><span><i style="font-size: 14px;" class="fa fa-chevron-up  fa-fw"></i> Submit for EXP</span></a>
+          <a href="javascript:void(0)"  class="button markexpawarded"><span><i style="font-size: 14px;" class="fa fa-chevron-up  fa-fw"></i> Mark as Awarded</span></a>'),
 			"sid"		=> -2,
 			"version"	=> 1.0,
 			"dateline"	=> TIME_NOW
 		);
 	$expmanager_templates[1] = array(
-			"title" 	=> "expmanage_cp_link",
+			"title" 	=> "expmanage_link_cp",
 			"template"	=> $db->escape_string('<tbody><tr><td class="trow1 smalltext"><a href="{$link}" class="usercp_nav_item modcp_nav_item"><i style="font-size: 14px;" class="fa fa-check-circle-o  fa-fw"></i> View EXP Threads</a></td></tr></tbody>'),
 			"sid"		=> -2,
 			"version"	=> 1.0,
@@ -167,10 +188,7 @@ function expmanager_install() {
 											<td class="trow1" valign="top">
 													{$exp_submissions}
                           <br><br>
-  												<div style=\'width:100%;text-align:center\'>
-  													<a href=\'javascript:void(0)\' id = \'{$mybb->user[\'uid\']}\' class=\'exprequestmoderation_button button\'>Request EXP for Approved Threads</a>
-  													<br><i>(If you believe approved threads are fit for EXP to be awarded, Mods will be notified)</i>
-  												</div>
+  											  {$notify_button}
 											</td>
 										</tr>
 									</table>
@@ -286,16 +304,16 @@ function expmanager_install() {
 			"dateline"	=> TIME_NOW
 	);
 	$expmanager_templates[9] = array(
-			"title" 	=> "expmanage_submit_dialog",
+			"title" 	=> "expmanage_dialog_submit",
 			"template"	=> $db->escape_string('<div id="expdialog" class="modal current">
 					<form>
-					<table style="padding: 0[px;" class="tborder" border="0" cellpadding="5" cellspacing="0" width="100%">
+					<table style="padding: 0px;" class="tborder" border="0" cellpadding="5" cellspacing="0" width="100%">
 						<tbody><tr>
 						<td class="thead" colspan="2"><strong>Submit Thread for Exp</strong></td>
 						</tr>
 						<tr>
 						<td class="trow1" style="text-shadow: 1px 1px 0px #000;" width="25%"><strong>EXP Category:</strong></td>
-						<td class="trow1"><select name="sub_catid">{$category_options}</select></td>
+						<td class="trow1"><select name="sub_catid[]" multiple>{$category_options}</select></td>
 						</tr>
 						<tr>
 						<td class="trow2" style="text-shadow: 1px 1px 0px #000;"><strong>Notes:</strong></td>
@@ -316,7 +334,7 @@ function expmanager_install() {
 			"dateline"	=> TIME_NOW
 	);
 	$expmanager_templates[10] = array(
-			"title" 	=> "expmanage_profile_link",
+			"title" 	=> "expmanage_link_profile",
 			"template"	=> $db->escape_string('<tbody><tr><td class="trow1 smalltext"><a href="{$link}" class="usercp_nav_item modcp_nav_item"><i style="font-size: 14px;" class="fa fa-check-circle-o  fa-fw"></i> Manage User\'s EXP Threads</a></td></tr></tbody>'),
 			"sid"		=> -2,
 			"version"	=> 1.0,
@@ -378,10 +396,7 @@ function expmanager_install() {
                       <td class="trow1" valign="top">
                           {$exp_submissions}
                           <br><br>
-                          <div style=\'width:100%;text-align:center\'>
-                            <a href=\'javascript:void(0)\' id = \'{$userid}\' class=\'exprequestmoderation_button_cancel button\'>Cancel Moderation Request</a>
-                            <br><i>(Get rid of the notification if threads aren\'t ready)</i>
-                          </div>
+                          {$cancel_notify_button}
                       </td>
                     </tr>
                   </table>
@@ -395,6 +410,56 @@ function expmanager_install() {
       "version"	=> 1.0,
       "dateline"	=> TIME_NOW
   );
+  $expmanager_templates[14] = array(
+			"title" 	=> "expmanage_dialog_markawarded",
+			"template"	=> $db->escape_string('<div id="expdialog2" class="modal current">
+					<form>
+					<table style="padding: 0px;" class="tborder" border="0" cellpadding="5" cellspacing="0" width="100%">
+						<tbody><tr>
+						<td class="thead" colspan="2"><strong>Submit Thread for Exp</strong></td>
+						</tr>
+						<tr>
+						<td class="trow1" style="text-shadow: 1px 1px 0px #000;" width="25%"><strong>EXP Category:</strong></td>
+						<td class="trow1"><select name="sub_catid[]" multiple>{$category_options}</select></td>
+						</tr>
+						<tr>
+						<td class="trow2" style="text-shadow: 1px 1px 0px #000;"><strong>Notes:</strong></td>
+						<td class="trow2"><textarea name="sub_notes"></textarea></td>
+						</tr>
+						<tr>
+						<td class="trow2" colspan="2">
+						<input type="hidden" name="sub_tid" value="{$thread[\'tid\']}">
+						<div align="center">
+							<a href="javascript:void(0);" class="button expmark_button">Submit</a>
+						</div></td>
+						</tr>
+						</tbody></table>
+					</form>
+				</div>'),
+			"sid"		=> -2,
+			"version"	=> 1.0,
+			"dateline"	=> TIME_NOW
+	);
+  $expmanager_templates[15] = array(
+			"title" 	=> "expmanage_buttons_notify",
+			"template"	=> $db->escape_string('<div style=\'width:100%;text-align:center\'>
+  	               <a href=\'javascript:void(0)\' id = \'{$mybb->user[\'uid\']}\' class=\'exprequestmoderation_button button\'>Request EXP for Approved Threads</a>
+  	                <br><i>(If you believe approved threads are fit for EXP to be awarded, Mods will be notified)</i>
+                    </div>'),
+			"sid"		=> -2,
+			"version"	=> 1.0,
+			"dateline"	=> TIME_NOW
+	);
+  $expmanager_templates[16] = array(
+			"title" 	=> "expmanage_buttons_cancelnotify",
+			"template"	=> $db->escape_string('<div style=\'width:100%;text-align:center\'>
+                    <a href=\'javascript:void(0)\' id = \'{$userid}\' class=\'exprequestmoderation_button_cancel button\'>Cancel Moderation Request</a>
+                    <br><i>(Get rid of the notification if threads aren\'t ready)</i>
+                    </div>'),
+			"sid"		=> -2,
+			"version"	=> 1.0,
+			"dateline"	=> TIME_NOW
+	);
 	foreach ($expmanager_templates as $row) {
 		$db->insert_query('templates', $row);
 	}
@@ -424,10 +489,10 @@ function expmanager_activate() {
 	// Apply any Template Edits
 	//First undo
 	require_once MYBB_ROOT."/inc/adminfunctions_templates.php";
-	find_replace_templatesets('showthread', '#{\$newreply}{\$expmanage_submit}#', '{\$newreply}');
+	find_replace_templatesets('showthread', '#{\$newreply}{\$expmanage_buttons_submit}#', '{\$newreply}');
   find_replace_templatesets('header', '#{\$awaitingusers}{\$expmanage_requests}#', '{\$awaitingusers}');
 	// Then apply
-	find_replace_templatesets('showthread', '#{\$newreply}#', '{\$newreply}{\$expmanage_submit}');
+	find_replace_templatesets('showthread', '#{\$newreply}#', '{\$newreply}{\$expmanage_buttons_submit}');
   find_replace_templatesets('header', '#{\$awaitingusers}#', '{\$awaitingusers}{\$expmanage_requests}');
 }
 
@@ -438,7 +503,7 @@ function expmanager_deactivate()
 {
 	// Revert any Template Edits
 	require_once MYBB_ROOT."/inc/adminfunctions_templates.php";
-	find_replace_templatesets('showthread', '#{\$newreply}{\$expmanage_submit}#', '{\$newreply}');
+	find_replace_templatesets('showthread', '#{\$newreply}{\$expmanage_buttons_submit}#', '{\$newreply}');
   find_replace_templatesets('header', '#{\$awaitingusers}{\$expmanage_requests}#', '{\$awaitingusers}');
 }
 
